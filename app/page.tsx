@@ -18,7 +18,7 @@ export default function Home() {
                 Features
               </a>
               <a
-                href="https://github.com"
+                href="https://github.com/fahadwaseem8/whois-tracker"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors flex items-center gap-1"
@@ -28,9 +28,9 @@ export default function Home() {
                 </svg>
                 GitHub
               </a>
-              <button className="rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-medium text-white hover:from-blue-700 hover:to-purple-700 transition-all">
+              <a href="/login" className="rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-medium text-white hover:from-blue-700 hover:to-purple-700 transition-all">
                 Sign In
-              </button>
+              </a>
             </div>
           </div>
         </nav>
@@ -56,11 +56,11 @@ export default function Home() {
             Protect your brand and stay informed with automated daily checks. Completely free, no hidden costs.
           </p>
           <div className="mt-10 flex items-center justify-center gap-4">
-            <button className="rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-lg hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105">
+            <a href="/signup" className="rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-lg hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105">
               Get Started Now
-            </button>
+            </a>
             <a
-              href="https://github.com"
+              href="https://github.com/fahadwaseem8/whois-tracker"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border-2 border-gray-300 dark:border-gray-600 px-8 py-4 text-lg font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all flex items-center gap-2"
@@ -194,10 +194,10 @@ export default function Home() {
                 1
               </div>
               <h3 className="mt-6 text-xl font-semibold text-gray-900 dark:text-white">
-                Sign Up & Subscribe
+                Sign Up Free
               </h3>
               <p className="mt-2 text-gray-600 dark:text-gray-300">
-                Create your account and choose a plan that fits your needs.
+                Create your free account in seconds. No credit card required.
               </p>
             </div>
             <div className="text-center">
@@ -322,7 +322,7 @@ export default function Home() {
               </li>
             </ul>
             <a
-              href="https://github.com"
+              href="https://github.com/fahadwaseem8/whois-tracker"
               target="_blank"
               rel="noopener noreferrer"
               className="mt-8 w-full rounded-lg bg-white px-6 py-3 font-semibold text-blue-600 hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
@@ -389,11 +389,11 @@ export default function Home() {
             Free forever. No credit card required. Start protecting your domains today.
           </p>
           <div className="mt-8 flex items-center justify-center gap-4">
-            <button className="rounded-lg bg-white px-8 py-4 text-lg font-semibold text-blue-600 shadow-lg hover:bg-gray-100 transition-all transform hover:scale-105">
+            <a href="/signup" className="rounded-lg bg-white px-8 py-4 text-lg font-semibold text-blue-600 shadow-lg hover:bg-gray-100 transition-all transform hover:scale-105">
               Get Started Now
-            </button>
+            </a>
             <a
-              href="https://github.com"
+              href="https://github.com/fahadwaseem8/whois-tracker"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border-2 border-white px-8 py-4 text-lg font-semibold text-white hover:bg-white/10 transition-all flex items-center gap-2"
