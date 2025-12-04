@@ -67,12 +67,6 @@ export async function GET(request: Request) {
           whois_data: whoisData,
         });
 
-        // Update last_checked timestamp on domain
-        await supabase
-          .from('domains')
-          .update({ last_checked: new Date().toISOString() })
-          .eq('id', domain.id);
-
         checkedCount++;
         checkedDomains.push(domain.domain_name);
 

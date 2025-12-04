@@ -60,12 +60,6 @@ export async function POST(
       );
     }
 
-    // Update last_checked timestamp on domain
-    await supabase
-      .from('domains')
-      .update({ last_checked: new Date().toISOString() })
-      .eq('id', id);
-
     return NextResponse.json({
       success: true,
       message: 'WHOIS data fetched successfully',
