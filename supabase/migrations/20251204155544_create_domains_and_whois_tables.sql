@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS public.domains (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     domain_name TEXT NOT NULL,
     is_active BOOLEAN DEFAULT true,
+    last_checked TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     UNIQUE(user_id, domain_name)
