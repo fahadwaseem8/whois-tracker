@@ -38,13 +38,16 @@ export class DomainsController {
   @UseGuards(JwtAuthGuard)
   @Post('whois')
   async getWhois(
+    @Request() req: UserRequest,
     @Body() whoisDto: WhoisDto,
-  ): Promise<{ domain: string; whois: string }> {
-    const whoisData = await this.domainsService.getWhois(whoisDto.domain);
-    return {
-      domain: whoisDto.domain,
-      whois: whoisData,
-    };
+  ): Promise<{
+    domain: string;
+    whois?: string;
+    message?: string;
+    created_at?: Date;
+    updated_at?: Date;
+  }> {
+    return this.domainsService.getWhoisFromDb(req.user.id, whoisDto.domain);
   }
 
   // CRUD endpoints
