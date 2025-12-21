@@ -16,10 +16,11 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET') || 'your-secret-key';
+        const secret =
+          configService.get<string>('JWT_SECRET') || 'your-secret-key';
         // Support both numeric strings (seconds) and time strings (e.g., '7d', '1h')
         const expiration = configService.get<string>('JWT_EXPIRATION') || '7d';
-        
+
         // If it's a pure number string, parse as seconds; otherwise use as-is (jsonwebtoken supports '7d', '1h', etc.)
         let expiresIn: number | StringValue;
         if (/^\d+$/.test(expiration)) {
@@ -29,7 +30,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
           // Time string format (e.g., '7d', '1h', '30m') - use as string
           expiresIn = expiration as StringValue;
         }
-        
+
         return {
           secret,
           signOptions: {

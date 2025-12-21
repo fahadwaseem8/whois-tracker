@@ -9,4 +9,3 @@ import { DomainsRepository } from './domains.repository';
   exports: [DomainsService],
 })
 export class DomainsModule {}
-

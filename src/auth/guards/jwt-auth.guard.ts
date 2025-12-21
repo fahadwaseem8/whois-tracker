@@ -30,7 +30,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       if (info?.name === 'NotBeforeError') {
         throw new UnauthorizedException('Token not active');
       }
-      throw new UnauthorizedException(info?.message || 'Invalid or expired token');
+      throw new UnauthorizedException(
+        info?.message || 'Invalid or expired token',
+      );
     }
     return user;
   }

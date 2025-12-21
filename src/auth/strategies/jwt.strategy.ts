@@ -22,12 +22,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<any> {
     try {
       // Ensure sub is a number (JWT may decode it as string)
-      const userId = typeof payload.sub === 'string' ? parseInt(payload.sub, 10) : payload.sub;
-      
+      const userId =
+        typeof payload.sub === 'string'
+          ? parseInt(payload.sub, 10)
+          : payload.sub;
+
       if (isNaN(userId) || userId <= 0) {
         throw new UnauthorizedException('Invalid token payload');
       }
-      
+
       const user = await this.authService.validateUser(userId);
       if (!user) {
         throw new UnauthorizedException('User not found');

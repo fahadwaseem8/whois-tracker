@@ -1,5 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
-import * as whois from 'whois';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { DomainsRepository } from './domains.repository';
 import { Domain, CreateDomainDto, UpdateDomainDto } from './domain.interface';
 
@@ -26,25 +30,38 @@ export class DomainsService {
       throw new BadRequestException('Invalid domain format');
     }
 
-    return new Promise((resolve, reject) => {
-      whois.lookup(cleanDomain, (err: Error | null, data: string | Array<{ server: string; data: string }>) => {
-        if (err) {
-          reject(
-            new BadRequestException(
-              `Failed to retrieve WHOIS data: ${err.message}`,
-            ),
-          );
-          return;
-        }
+    try {
+      // Dynamic import for ES module
+      const { whoisDomain } = await import('whoiser');
 
-        // Handle both string and array responses - return raw text
-        if (Array.isArray(data)) {
-          resolve(data.map(result => result.data).join('\n\n---\n\n'));
-        } else {
-          resolve(data);
-        }
+      const result = await whoisDomain(cleanDomain, {
+        timeout: 15000, // 15 second timeout for serverless
       });
-    });
+
+      // Convert the result to a readable string format
+      let whoisText = '';
+
+      for (const [server, data] of Object.entries(result)) {
+        if (typeof data === 'string') {
+          whoisText += `\n=== ${server} ===\n${data}\n`;
+        } else if (data && typeof data === 'object') {
+          whoisText += `\n=== ${server} ===\n`;
+          for (const [key, value] of Object.entries(data)) {
+            if (Array.isArray(value)) {
+              whoisText += `${key}: ${value.join(', ')}\n`;
+            } else {
+              whoisText += `${key}: ${value}\n`;
+            }
+          }
+        }
+      }
+
+      return whoisText || 'No WHOIS data available';
+    } catch (error) {
+      throw new BadRequestException(
+        `Failed to retrieve WHOIS data: ${error.message}`,
+      );
+    }
   }
 
   // CRUD methods
@@ -57,12 +74,16 @@ export class DomainsService {
       .toLowerCase();
   }
 
-  async create(userId: number, createDomainDto: CreateDomainDto): Promise<Domain> {
+  async create(
+    userId: number,
+    createDomainDto: CreateDomainDto,
+  ): Promise<Domain> {
     const cleanedDomain = this.cleanDomain(createDomainDto.domain);
-    
+
     // Check if domain already exists for this user
-    const existingDomains = await this.domainsRepository.findAllByUserId(userId);
-    if (existingDomains.some(d => d.domain === cleanedDomain)) {
+    const existingDomains =
+      await this.domainsRepository.findAllByUserId(userId);
+    if (existingDomains.some((d) => d.domain === cleanedDomain)) {
       throw new ConflictException('Domain already exists in your account');
     }
 
@@ -81,16 +102,25 @@ export class DomainsService {
     return domain;
   }
 
-  async update(id: number, userId: number, updateDomainDto: UpdateDomainDto): Promise<Domain> {
+  async update(
+    id: number,
+    userId: number,
+    updateDomainDto: UpdateDomainDto,
+  ): Promise<Domain> {
     const domain = await this.findOne(id, userId);
-    
+
     const updateData: Partial<Domain> = {};
     if (updateDomainDto.domain) {
       updateData.domain = this.cleanDomain(updateDomainDto.domain);
-      
+
       // Check if the new domain already exists for this user (excluding current domain)
-      const existingDomains = await this.domainsRepository.findAllByUserId(userId);
-      if (existingDomains.some(d => d.domain === updateData.domain && d.id !== id)) {
+      const existingDomains =
+        await this.domainsRepository.findAllByUserId(userId);
+      if (
+        existingDomains.some(
+          (d) => d.domain === updateData.domain && d.id !== id,
+        )
+      ) {
         throw new ConflictException('Domain already exists in your account');
       }
     }
@@ -110,12 +140,16 @@ export class DomainsService {
   }
 
   // Cron job method to fetch WHOIS for all domains
-  async fetchWhoisForAllDomains(): Promise<{ success: number; failed: number; errors: string[] }> {
+  async fetchWhoisForAllDomains(): Promise<{
+    success: number;
+    failed: number;
+    errors: string[];
+  }> {
     const allDomains = await this.domainsRepository.findAll();
-    
+
     // Get unique domains (deduplicate - same domain might be in multiple user accounts)
-    const uniqueDomains = [...new Set(allDomains.map(d => d.domain))];
-    
+    const uniqueDomains = [...new Set(allDomains.map((d) => d.domain))];
+
     let success = 0;
     let failed = 0;
     const errors: string[] = [];
@@ -129,7 +163,8 @@ export class DomainsService {
         success++;
       } catch (error) {
         failed++;
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
         errors.push(`Domain ${domain}: ${errorMessage}`);
       }
     }
@@ -137,4 +172,3 @@ export class DomainsService {
     return { success, failed, errors };
   }
 }
-

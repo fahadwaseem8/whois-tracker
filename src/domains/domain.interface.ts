@@ -13,4 +13,3 @@ export interface CreateDomainDto {
 export interface UpdateDomainDto {
   domain?: string;
 }
-
