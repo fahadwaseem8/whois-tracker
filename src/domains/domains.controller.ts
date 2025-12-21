@@ -9,7 +9,10 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  Headers,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DomainsService } from './domains.service';
 import { WhoisDto } from './dto/whois.dto';
 import { CreateDomainDto } from './dto/create-domain.dto';
@@ -26,12 +29,17 @@ interface UserRequest {
 
 @Controller('domains')
 export class DomainsController {
-  constructor(private readonly domainsService: DomainsService) {}
+  constructor(
+    private readonly domainsService: DomainsService,
+    private readonly configService: ConfigService,
+  ) {}
 
   // WHOIS endpoint
   @UseGuards(JwtAuthGuard)
   @Post('whois')
-  async getWhois(@Body() whoisDto: WhoisDto): Promise<{ domain: string; whois: string }> {
+  async getWhois(
+    @Body() whoisDto: WhoisDto,
+  ): Promise<{ domain: string; whois: string }> {
     const whoisData = await this.domainsService.getWhois(whoisDto.domain);
     return {
       domain: whoisDto.domain,
@@ -83,5 +91,32 @@ export class DomainsController {
     await this.domainsService.remove(id, req.user.id);
     return { message: 'Domain deleted successfully' };
   }
-}
 
+  // Cron endpoint - protected by Vercel cron header or secret token
+  @Get('cron/fetch-whois')
+  async cronFetchWhois(
+    @Headers('x-vercel-cron') vercelCronHeader: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{
+    message: string;
+    success: number;
+    failed: number;
+    errors: string[];
+  }> {
+    // Vercel cron automatically sends x-vercel-cron header
+    // Also allow manual calls with CRON_SECRET
+    const cronSecret = this.configService.get<string>('CRON_SECRET');
+    const isVercelCron = vercelCronHeader === '1';
+    const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+    if (!isVercelCron && !hasValidSecret) {
+      throw new UnauthorizedException('Unauthorized: Invalid cron request');
+    }
+
+    const result = await this.domainsService.fetchWhoisForAllDomains();
+    return {
+      message: `WHOIS fetch completed. Success: ${result.success}, Failed: ${result.failed}`,
+      ...result,
+    };
+  }
+}

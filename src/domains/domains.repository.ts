@@ -2,6 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { Pool } from '@vercel/postgres';
 import { DATABASE_POOL } from '../database/database.module';
 import { Domain, CreateDomainDto } from './domain.interface';
+import { WhoisRecord } from './whois-record.interface';
 
 @Injectable()
 export class DomainsRepository {
@@ -24,7 +25,26 @@ export class DomainsRepository {
     await this.pool.query(query);
   }
 
-  async create(userId: number, createDomainDto: CreateDomainDto): Promise<Domain> {
+  async createWhoisRecordsTable(): Promise<void> {
+    const query = `
+      CREATE TABLE IF NOT EXISTS whois_records (
+        id SERIAL PRIMARY KEY,
+        domain VARCHAR(255) UNIQUE NOT NULL,
+        whois_data TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_whois_records_domain ON whois_records(domain);
+      CREATE INDEX IF NOT EXISTS idx_whois_records_updated_at ON whois_records(updated_at);
+    `;
+    await this.pool.query(query);
+  }
+
+  async create(
+    userId: number,
+    createDomainDto: CreateDomainDto,
+  ): Promise<Domain> {
     const { domain } = createDomainDto;
     const result = await this.pool.query(
       'INSERT INTO domains (user_id, domain) VALUES ($1, $2) RETURNING *',
@@ -49,16 +69,24 @@ export class DomainsRepository {
     return (result.rows[0] as Domain) || null;
   }
 
-  async update(id: number, userId: number, data: Partial<Domain>): Promise<Domain | null> {
+  async update(
+    id: number,
+    userId: number,
+    data: Partial<Domain>,
+  ): Promise<Domain | null> {
     const fields = Object.keys(data)
-      .filter((key) => key !== 'id' && key !== 'user_id' && key !== 'created_at')
+      .filter(
+        (key) => key !== 'id' && key !== 'user_id' && key !== 'created_at',
+      )
       .map((key, index) => `${key} = $${index + 3}`)
       .join(', ');
 
     if (!fields) return this.findOne(id, userId);
 
     const values = Object.keys(data)
-      .filter((key) => key !== 'id' && key !== 'user_id' && key !== 'created_at')
+      .filter(
+        (key) => key !== 'id' && key !== 'user_id' && key !== 'created_at',
+      )
       .map((key) => data[key as keyof Domain])
       .filter((value) => value !== undefined);
 
@@ -76,5 +104,34 @@ export class DomainsRepository {
     );
     return (result.rowCount ?? 0) > 0;
   }
-}
 
+  async findAll(): Promise<Domain[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM domains ORDER BY created_at DESC',
+    );
+    return result.rows as Domain[];
+  }
+
+  async findWhoisRecordByDomain(domain: string): Promise<WhoisRecord | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM whois_records WHERE domain = $1',
+      [domain],
+    );
+    return (result.rows[0] as WhoisRecord) || null;
+  }
+
+  async upsertWhoisRecord(
+    domain: string,
+    whoisData: string,
+  ): Promise<WhoisRecord> {
+    const result = await this.pool.query(
+      `INSERT INTO whois_records (domain, whois_data) 
+       VALUES ($1, $2) 
+       ON CONFLICT (domain) 
+       DO UPDATE SET whois_data = $2, updated_at = CURRENT_TIMESTAMP 
+       RETURNING *`,
+      [domain, whoisData],
+    );
+    return result.rows[0] as WhoisRecord;
+  }
+}

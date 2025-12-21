@@ -9,6 +9,7 @@ export class DomainsService {
 
   async initializeDatabase(): Promise<void> {
     await this.domainsRepository.createDomainsTable();
+    await this.domainsRepository.createWhoisRecordsTable();
   }
 
   // WHOIS methods
@@ -106,6 +107,34 @@ export class DomainsService {
     if (!deleted) {
       throw new NotFoundException('Domain not found');
     }
+  }
+
+  // Cron job method to fetch WHOIS for all domains
+  async fetchWhoisForAllDomains(): Promise<{ success: number; failed: number; errors: string[] }> {
+    const allDomains = await this.domainsRepository.findAll();
+    
+    // Get unique domains (deduplicate - same domain might be in multiple user accounts)
+    const uniqueDomains = [...new Set(allDomains.map(d => d.domain))];
+    
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    // Fetch WHOIS once per unique domain
+    for (const domain of uniqueDomains) {
+      try {
+        const whoisData = await this.getWhois(domain);
+        // Upsert: update if exists, create if not
+        await this.domainsRepository.upsertWhoisRecord(domain, whoisData);
+        success++;
+      } catch (error) {
+        failed++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        errors.push(`Domain ${domain}: ${errorMessage}`);
+      }
+    }
+
+    return { success, failed, errors };
   }
 }
 

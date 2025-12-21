@@ -12,5 +12,11 @@
       "dest": "src/main.ts",
       "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
     }
+  ],
+  "crons": [
+    {
+      "path": "/domains/cron/fetch-whois",
+      "schedule": "0 0 * * *"
+    }
   ]
 }
