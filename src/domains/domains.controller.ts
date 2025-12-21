@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   ParseIntPipe,
@@ -34,12 +35,44 @@ export class DomainsController {
     private readonly configService: ConfigService,
   ) {}
 
-  // WHOIS endpoint
+  // CRUD endpoints
   @UseGuards(JwtAuthGuard)
-  @Post('whois')
-  async getWhois(
+  @Post()
+  async create(
     @Request() req: UserRequest,
-    @Body() whoisDto: WhoisDto,
+    @Body() createDomainDto: CreateDomainDto,
+  ): Promise<{ message: string }> {
+    await this.domainsService.create(req.user.id, createDomainDto);
+    return { message: 'Domain added successfully' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get()
+  async findAll(
+    @Request() req: UserRequest,
+    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+  ): Promise<{
+    data: { domain: string; created_at: Date; updated_at: Date }[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    return this.domainsService.findAllPaginated(
+      req.user.id,
+      page || 1,
+      limit || 5,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':domain')
+  async findOne(
+    @Request() req: UserRequest,
+    @Param('domain') domain: string,
   ): Promise<{
     domain: string;
     whois?: string;
@@ -47,51 +80,41 @@ export class DomainsController {
     created_at?: Date;
     updated_at?: Date;
   }> {
-    return this.domainsService.getWhoisFromDb(req.user.id, whoisDto.domain);
-  }
-
-  // CRUD endpoints
-  @UseGuards(JwtAuthGuard)
-  @Post()
-  async create(
-    @Request() req: UserRequest,
-    @Body() createDomainDto: CreateDomainDto,
-  ): Promise<Domain> {
-    return this.domainsService.create(req.user.id, createDomainDto);
+    return this.domainsService.getWhoisFromDb(req.user.id, domain);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get()
-  async findAll(@Request() req: UserRequest): Promise<Domain[]> {
-    return this.domainsService.findAll(req.user.id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  async findOne(
-    @Request() req: UserRequest,
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<Domain> {
-    return this.domainsService.findOne(id, req.user.id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Put(':id')
+  @Put(':domain')
   async update(
     @Request() req: UserRequest,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('domain') domain: string,
     @Body() updateDomainDto: UpdateDomainDto,
-  ): Promise<Domain> {
-    return this.domainsService.update(id, req.user.id, updateDomainDto);
+  ): Promise<{
+    message: string;
+    domain: string;
+    created_at: Date;
+    updated_at: Date;
+  }> {
+    const updated = await this.domainsService.updateByDomain(
+      domain,
+      req.user.id,
+      updateDomainDto,
+    );
+    return {
+      message: 'Domain updated successfully',
+      domain: updated.domain,
+      created_at: updated.created_at,
+      updated_at: updated.updated_at,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
-  @Delete(':id')
+  @Delete(':domain')
   async remove(
     @Request() req: UserRequest,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('domain') domain: string,
   ): Promise<{ message: string }> {
-    await this.domainsService.remove(id, req.user.id);
+    await this.domainsService.removeByDomain(domain, req.user.id);
     return { message: 'Domain deleted successfully' };
   }
 

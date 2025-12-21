@@ -42,7 +42,6 @@ export class AuthService {
     return {
       access_token,
       user: {
-        id: user.id,
         email: user.email,
       },
     };
@@ -70,7 +69,6 @@ export class AuthService {
     return {
       access_token,
       user: {
-        id: user.id,
         email: user.email,
       },
     };

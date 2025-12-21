@@ -36,6 +36,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   getProfile(@Request() req: { user: UserPayload }) {
-    return req.user;
+    return { email: req.user.email };
   }
 }

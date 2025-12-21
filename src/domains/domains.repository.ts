@@ -61,10 +61,41 @@ export class DomainsRepository {
     return result.rows as Domain[];
   }
 
+  async findAllByUserIdPaginated(
+    userId: number,
+    limit: number,
+    offset: number,
+  ): Promise<Domain[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM domains WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
+      [userId, limit, offset],
+    );
+    return result.rows as Domain[];
+  }
+
+  async countByUserId(userId: number): Promise<number> {
+    const result = await this.pool.query(
+      'SELECT COUNT(*)::int as count FROM domains WHERE user_id = $1',
+      [userId],
+    );
+    return (result.rows[0] as { count: number }).count;
+  }
+
   async findOne(id: number, userId: number): Promise<Domain | null> {
     const result = await this.pool.query(
       'SELECT * FROM domains WHERE id = $1 AND user_id = $2',
       [id, userId],
+    );
+    return (result.rows[0] as Domain) || null;
+  }
+
+  async findByDomainAndUserId(
+    domain: string,
+    userId: number,
+  ): Promise<Domain | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM domains WHERE domain = $1 AND user_id = $2',
+      [domain, userId],
     );
     return (result.rows[0] as Domain) || null;
   }
@@ -97,10 +128,46 @@ export class DomainsRepository {
     return (result.rows[0] as Domain) || null;
   }
 
+  async updateByDomain(
+    domain: string,
+    userId: number,
+    data: Partial<Domain>,
+  ): Promise<Domain | null> {
+    const fields = Object.keys(data)
+      .filter(
+        (key) => key !== 'id' && key !== 'user_id' && key !== 'created_at',
+      )
+      .map((key, index) => `${key} = $${index + 3}`)
+      .join(', ');
+
+    if (!fields) return this.findByDomainAndUserId(domain, userId);
+
+    const values = Object.keys(data)
+      .filter(
+        (key) => key !== 'id' && key !== 'user_id' && key !== 'created_at',
+      )
+      .map((key) => data[key as keyof Domain])
+      .filter((value) => value !== undefined);
+
+    const result = await this.pool.query(
+      `UPDATE domains SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE domain = $1 AND user_id = $2 RETURNING *`,
+      [domain, userId, ...values],
+    );
+    return (result.rows[0] as Domain) || null;
+  }
+
   async delete(id: number, userId: number): Promise<boolean> {
     const result = await this.pool.query(
       'DELETE FROM domains WHERE id = $1 AND user_id = $2',
       [id, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteByDomain(domain: string, userId: number): Promise<boolean> {
+    const result = await this.pool.query(
+      'DELETE FROM domains WHERE domain = $1 AND user_id = $2',
+      [domain, userId],
     );
     return (result.rowCount ?? 0) > 0;
   }

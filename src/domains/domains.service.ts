@@ -92,7 +92,7 @@ export class DomainsService {
 
       for (const [server, data] of Object.entries(result)) {
         if (typeof data === 'string') {
-          whoisText += `\n=== ${server} ===\n${data}\n`;
+          whoisText += `\n=== ${server} ===\n${data as string}\n`;
         } else if (data && typeof data === 'object') {
           whoisText += `\n=== ${server} ===\n`;
           for (const [key, value] of Object.entries(data)) {
@@ -107,8 +107,10 @@ export class DomainsService {
 
       return whoisText || 'No WHOIS data available';
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException(
-        `Failed to retrieve WHOIS data: ${error.message}`,
+        `Failed to retrieve WHOIS data: ${errorMessage}`,
       );
     }
   }
@@ -143,12 +145,58 @@ export class DomainsService {
     return this.domainsRepository.findAllByUserId(userId);
   }
 
+  async findAllPaginated(
+    userId: number,
+    page: number = 1,
+    limit: number = 5,
+  ): Promise<{
+    data: { domain: string; created_at: Date; updated_at: Date }[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const offset = (page - 1) * limit;
+    const [domains, total] = await Promise.all([
+      this.domainsRepository.findAllByUserIdPaginated(userId, limit, offset),
+      this.domainsRepository.countByUserId(userId),
+    ]);
+
+    return {
+      data: domains.map((d) => ({
+        domain: d.domain,
+        created_at: d.created_at,
+        updated_at: d.updated_at,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async findOne(id: number, userId: number): Promise<Domain> {
     const domain = await this.domainsRepository.findOne(id, userId);
     if (!domain) {
       throw new NotFoundException('Domain not found');
     }
     return domain;
+  }
+
+  async findOneByDomain(domain: string, userId: number): Promise<Domain> {
+    const cleanedDomain = this.cleanDomain(domain);
+    const domainRecord = await this.domainsRepository.findByDomainAndUserId(
+      cleanedDomain,
+      userId,
+    );
+    if (!domainRecord) {
+      throw new NotFoundException('Domain not found');
+    }
+    return domainRecord;
   }
 
   async update(
@@ -181,8 +229,54 @@ export class DomainsService {
     return updated;
   }
 
+  async updateByDomain(
+    domain: string,
+    userId: number,
+    updateDomainDto: UpdateDomainDto,
+  ): Promise<Domain> {
+    const cleanedDomain = this.cleanDomain(domain);
+    const domainRecord = await this.findOneByDomain(cleanedDomain, userId);
+
+    const updateData: Partial<Domain> = {};
+    if (updateDomainDto.domain) {
+      updateData.domain = this.cleanDomain(updateDomainDto.domain);
+
+      // Check if the new domain already exists for this user (excluding current domain)
+      const existingDomains =
+        await this.domainsRepository.findAllByUserId(userId);
+      if (
+        existingDomains.some(
+          (d) => d.domain === updateData.domain && d.id !== domainRecord.id,
+        )
+      ) {
+        throw new ConflictException('Domain already exists in your account');
+      }
+    }
+
+    const updated = await this.domainsRepository.updateByDomain(
+      cleanedDomain,
+      userId,
+      updateData,
+    );
+    if (!updated) {
+      throw new NotFoundException('Domain not found');
+    }
+    return updated;
+  }
+
   async remove(id: number, userId: number): Promise<void> {
     const deleted = await this.domainsRepository.delete(id, userId);
+    if (!deleted) {
+      throw new NotFoundException('Domain not found');
+    }
+  }
+
+  async removeByDomain(domain: string, userId: number): Promise<void> {
+    const cleanedDomain = this.cleanDomain(domain);
+    const deleted = await this.domainsRepository.deleteByDomain(
+      cleanedDomain,
+      userId,
+    );
     if (!deleted) {
       throw new NotFoundException('Domain not found');
     }
