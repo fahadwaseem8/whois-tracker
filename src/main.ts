@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { UsersService } from './users/users.service';
+import { DomainsService } from './domains/domains.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -26,6 +27,9 @@ async function bootstrap() {
   // Initialize database tables
   const usersService = app.get(UsersService);
   await usersService.initializeDatabase();
+
+  const domainsService = app.get(DomainsService);
+  await domainsService.initializeDatabase();
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
