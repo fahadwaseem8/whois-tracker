@@ -15,8 +15,13 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS
-  app.enableCors();
+  // Enable CORS with explicit headers
+  app.enableCors({
+    origin: true, // Allow all origins (or specify your frontend URL)
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  });
 
   // Initialize database tables
   const usersService = app.get(UsersService);

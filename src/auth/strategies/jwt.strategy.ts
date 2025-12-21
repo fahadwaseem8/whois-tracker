@@ -11,25 +11,35 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private authService: AuthService,
     private configService: ConfigService,
   ) {
+    const secret = configService.get<string>('JWT_SECRET') || 'your-secret-key';
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'your-secret-key',
+      secretOrKey: secret,
     });
   }
 
   async validate(payload: JwtPayload): Promise<any> {
-    // Ensure sub is a number (JWT may decode it as string)
-    const userId = typeof payload.sub === 'string' ? parseInt(payload.sub, 10) : payload.sub;
-    
-    if (isNaN(userId)) {
-      throw new UnauthorizedException('Invalid token payload');
+    try {
+      // Ensure sub is a number (JWT may decode it as string)
+      const userId = typeof payload.sub === 'string' ? parseInt(payload.sub, 10) : payload.sub;
+      
+      if (isNaN(userId) || userId <= 0) {
+        throw new UnauthorizedException('Invalid token payload');
+      }
+      
+      const user = await this.authService.validateUser(userId);
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+      return user;
+    } catch (error) {
+      // Re-throw UnauthorizedException as-is, but log other errors
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('JWT validation error:', error);
+      throw new UnauthorizedException('Authentication failed');
     }
-    
-    const user = await this.authService.validateUser(userId);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-    return user;
   }
 }
