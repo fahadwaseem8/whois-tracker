@@ -57,7 +57,7 @@ export class AuthService {
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -74,13 +74,13 @@ export class AuthService {
     };
   }
 
-  async validateUser(userId: number): Promise<any> {
+  async validateUser(userId: string): Promise<any> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    const { password, ...result } = user;
+    const { password_hash, ...result } = user;
     return result;
   }
 }

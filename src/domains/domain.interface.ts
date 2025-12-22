@@ -1,15 +1,14 @@
 export interface Domain {
   id: number;
-  user_id: number;
-  domain: string;
-  created_at: Date;
-  updated_at: Date;
+  domain_name: string;
+  last_checked_at: Date | null;
 }
 
 export interface CreateDomainDto {
-  domain: string;
+  domain_name: string;
 }
 
 export interface UpdateDomainDto {
-  domain?: string;
+  domain_name?: string;
+  last_checked_at?: Date;
 }

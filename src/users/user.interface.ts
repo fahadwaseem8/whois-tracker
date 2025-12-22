@@ -1,9 +1,8 @@
 export interface User {
-  id: number;
+  id: string; // UUID
   email: string;
-  password: string;
+  password_hash: string;
   created_at: Date;
-  updated_at: Date;
 }
 
 export interface CreateUserDto {

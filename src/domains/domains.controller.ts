@@ -23,7 +23,7 @@ import { Domain } from './domain.interface';
 
 interface UserRequest {
   user: {
-    id: number;
+    id: string; // UUID
     email: string;
   };
 }
@@ -41,9 +41,12 @@ export class DomainsController {
   async create(
     @Request() req: UserRequest,
     @Body() createDomainDto: CreateDomainDto,
-  ): Promise<{ message: string }> {
-    await this.domainsService.create(req.user.id, createDomainDto);
-    return { message: 'Domain added successfully' };
+  ): Promise<{ message: string; domain: Domain }> {
+    const result = await this.domainsService.create(
+      req.user.id,
+      createDomainDto,
+    );
+    return { message: result.message, domain: result.domain };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -53,7 +56,11 @@ export class DomainsController {
     @Query('page', new ParseIntPipe({ optional: true })) page?: number,
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
   ): Promise<{
-    data: { domain: string; created_at: Date; updated_at: Date }[];
+    data: {
+      domain_name: string;
+      last_checked_at: Date | null;
+      whois?: any;
+    }[];
     pagination: {
       page: number;
       limit: number;
@@ -75,37 +82,11 @@ export class DomainsController {
     @Param('domain') domain: string,
   ): Promise<{
     domain: string;
-    whois?: string;
+    whois?: any;
     message?: string;
-    created_at?: Date;
-    updated_at?: Date;
+    last_checked_at?: Date | null;
   }> {
     return this.domainsService.getWhoisFromDb(req.user.id, domain);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Put(':domain')
-  async update(
-    @Request() req: UserRequest,
-    @Param('domain') domain: string,
-    @Body() updateDomainDto: UpdateDomainDto,
-  ): Promise<{
-    message: string;
-    domain: string;
-    created_at: Date;
-    updated_at: Date;
-  }> {
-    const updated = await this.domainsService.updateByDomain(
-      domain,
-      req.user.id,
-      updateDomainDto,
-    );
-    return {
-      message: 'Domain updated successfully',
-      domain: updated.domain,
-      created_at: updated.created_at,
-      updated_at: updated.updated_at,
-    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -114,8 +95,8 @@ export class DomainsController {
     @Request() req: UserRequest,
     @Param('domain') domain: string,
   ): Promise<{ message: string }> {
-    await this.domainsService.removeByDomain(domain, req.user.id);
-    return { message: 'Domain deleted successfully' };
+    await this.domainsService.remove(domain, req.user.id);
+    return { message: 'Domain removed from your watch list' };
   }
 
   // Cron endpoint - protected by Vercel cron header or secret token

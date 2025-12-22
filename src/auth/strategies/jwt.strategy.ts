@@ -21,13 +21,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: JwtPayload): Promise<any> {
     try {
-      // Ensure sub is a number (JWT may decode it as string)
-      const userId =
-        typeof payload.sub === 'string'
-          ? parseInt(payload.sub, 10)
-          : payload.sub;
+      const userId = payload.sub;
 
-      if (isNaN(userId) || userId <= 0) {
+      if (!userId || typeof userId !== 'string') {
         throw new UnauthorizedException('Invalid token payload');
       }
 

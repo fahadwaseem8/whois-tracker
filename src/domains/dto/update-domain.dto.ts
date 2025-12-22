@@ -7,5 +7,5 @@ export class UpdateDomainDto {
     message:
       'Invalid domain format. Please provide a valid domain name (e.g., example.com)',
   })
-  domain?: string;
+  domain_name?: string;
 }

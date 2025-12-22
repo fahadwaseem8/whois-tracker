@@ -1,7 +1,9 @@
 export interface WhoisRecord {
   id: number;
-  domain: string;
-  whois_data: string;
-  created_at: Date;
+  domain_id: number;
+  registrar: string | null;
+  expiry_date: Date | null;
+  creation_date: Date | null;
+  raw_text: string;
   updated_at: Date;
 }

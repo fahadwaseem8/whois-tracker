@@ -13,19 +13,19 @@ export class DomainsService {
 
   async initializeDatabase(): Promise<void> {
     await this.domainsRepository.createDomainsTable();
+    await this.domainsRepository.createUserDomainsTable();
     await this.domainsRepository.createWhoisRecordsTable();
   }
 
   // WHOIS methods
   async getWhoisFromDb(
-    userId: number,
+    userId: string,
     domain: string,
   ): Promise<{
     domain: string;
-    whois?: string;
+    whois?: any;
     message?: string;
-    created_at?: Date;
-    updated_at?: Date;
+    last_checked_at?: Date | null;
   }> {
     // Clean the domain
     const cleanDomain = this.cleanDomain(domain);
@@ -35,44 +35,64 @@ export class DomainsService {
       throw new BadRequestException('Invalid domain format');
     }
 
-    // Try to get whois record from database
-    const whoisRecord =
-      await this.domainsRepository.findWhoisRecordByDomain(cleanDomain);
+    // Find the domain
+    const domainRecord =
+      await this.domainsRepository.findDomainByName(cleanDomain);
 
-    if (whoisRecord) {
-      // Return the whois data from database
+    if (!domainRecord) {
       return {
         domain: cleanDomain,
-        whois: whoisRecord.whois_data,
-        created_at: whoisRecord.created_at,
-        updated_at: whoisRecord.updated_at,
+        message: "This domain isn't being tracked yet",
       };
     }
 
-    // If no whois record exists, check if user has this domain in their list
-    const userDomains = await this.domainsRepository.findAllByUserId(userId);
-    const userHasDomain = userDomains.some((d) => d.domain === cleanDomain);
+    // Check if user is watching this domain
+    const isWatching = await this.domainsRepository.isUserWatchingDomain(
+      userId,
+      domainRecord.id,
+    );
 
-    if (userHasDomain) {
+    if (!isWatching) {
       return {
         domain: cleanDomain,
-        message: 'Domain has not been tracked yet',
+        message: "You aren't watching this domain",
+      };
+    }
+
+    // Get WHOIS record
+    const whoisRecord = await this.domainsRepository.findWhoisRecordByDomainId(
+      domainRecord.id,
+    );
+
+    if (whoisRecord) {
+      return {
+        domain: cleanDomain,
+        whois: {
+          registrar: whoisRecord.registrar,
+          expiry_date: whoisRecord.expiry_date,
+          creation_date: whoisRecord.creation_date,
+          raw_text: whoisRecord.raw_text,
+          updated_at: whoisRecord.updated_at,
+        },
+        last_checked_at: domainRecord.last_checked_at,
       };
     }
 
     return {
       domain: cleanDomain,
-      message: "This domain isn't being tracked yet",
+      message: 'Domain has not been tracked yet',
+      last_checked_at: domainRecord.last_checked_at,
     };
   }
 
-  async getWhois(domain: string): Promise<string> {
+  async getWhois(domain: string): Promise<{
+    registrar: string | null;
+    expiryDate: Date | null;
+    creationDate: Date | null;
+    rawText: string;
+  }> {
     // Clean the domain - remove protocol and path if present
-    const cleanDomain = domain
-      .replace(/^https?:\/\//, '')
-      .replace(/^www\./, '')
-      .split('/')[0]
-      .trim();
+    const cleanDomain = this.cleanDomain(domain);
 
     // Validate domain format
     if (!/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i.test(cleanDomain)) {
@@ -87,8 +107,11 @@ export class DomainsService {
         timeout: 15000, // 15 second timeout for serverless
       });
 
-      // Convert the result to a readable string format
+      // Convert the result to a readable string format and parse data
       let whoisText = '';
+      let registrar: string | null = null;
+      let expiryDate: Date | null = null;
+      let creationDate: Date | null = null;
 
       for (const [server, data] of Object.entries(result)) {
         if (typeof data === 'string') {
@@ -96,6 +119,37 @@ export class DomainsService {
         } else if (data && typeof data === 'object') {
           whoisText += `\n=== ${server} ===\n`;
           for (const [key, value] of Object.entries(data)) {
+            // Extract specific fields
+            if (
+              key.toLowerCase().includes('registrar') &&
+              !registrar &&
+              typeof value === 'string'
+            ) {
+              registrar = value;
+            }
+            if (
+              (key.toLowerCase().includes('expiry') ||
+                key.toLowerCase().includes('expiration')) &&
+              !expiryDate
+            ) {
+              const dateValue = Array.isArray(value) ? value[0] : value;
+              if (dateValue) {
+                const parsed = new Date(dateValue as string);
+                if (!isNaN(parsed.getTime())) expiryDate = parsed;
+              }
+            }
+            if (
+              (key.toLowerCase().includes('creation') ||
+                key.toLowerCase().includes('created')) &&
+              !creationDate
+            ) {
+              const dateValue = Array.isArray(value) ? value[0] : value;
+              if (dateValue) {
+                const parsed = new Date(dateValue as string);
+                if (!isNaN(parsed.getTime())) creationDate = parsed;
+              }
+            }
+
             if (Array.isArray(value)) {
               whoisText += `${key}: ${value.join(', ')}\n`;
             } else {
@@ -105,7 +159,12 @@ export class DomainsService {
         }
       }
 
-      return whoisText || 'No WHOIS data available';
+      return {
+        registrar,
+        expiryDate,
+        creationDate,
+        rawText: whoisText || 'No WHOIS data available',
+      };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -125,32 +184,56 @@ export class DomainsService {
       .toLowerCase();
   }
 
-  async create(
-    userId: number,
-    createDomainDto: CreateDomainDto,
-  ): Promise<Domain> {
-    const cleanedDomain = this.cleanDomain(createDomainDto.domain);
+  async create(userId: string, createDomainDto: CreateDomainDto): Promise<{
+    domain: Domain;
+    message: string;
+  }> {
+    const cleanedDomain = this.cleanDomain(createDomainDto.domain_name);
 
-    // Check if domain already exists for this user
-    const existingDomains =
-      await this.domainsRepository.findAllByUserId(userId);
-    if (existingDomains.some((d) => d.domain === cleanedDomain)) {
-      throw new ConflictException('Domain already exists in your account');
+    // Find or create domain
+    let domainRecord = await this.domainsRepository.findDomainByName(
+      cleanedDomain,
+    );
+
+    if (!domainRecord) {
+      domainRecord = await this.domainsRepository.createDomain({
+        domain_name: cleanedDomain,
+      });
     }
 
-    return this.domainsRepository.create(userId, { domain: cleanedDomain });
+    // Check if user is already watching this domain
+    const isWatching = await this.domainsRepository.isUserWatchingDomain(
+      userId,
+      domainRecord.id,
+    );
+
+    if (isWatching) {
+      throw new ConflictException('You are already watching this domain');
+    }
+
+    // Add domain to user's watch list
+    await this.domainsRepository.addDomainToUser(userId, domainRecord.id);
+
+    return {
+      domain: domainRecord,
+      message: 'Domain added to your watch list',
+    };
   }
 
-  async findAll(userId: number): Promise<Domain[]> {
-    return this.domainsRepository.findAllByUserId(userId);
+  async findAll(userId: string): Promise<Domain[]> {
+    return this.domainsRepository.findDomainsByUserId(userId);
   }
 
   async findAllPaginated(
-    userId: number,
+    userId: string,
     page: number = 1,
     limit: number = 5,
   ): Promise<{
-    data: { domain: string; created_at: Date; updated_at: Date }[];
+    data: {
+      domain_name: string;
+      last_checked_at: Date | null;
+      whois?: any;
+    }[];
     pagination: {
       page: number;
       limit: number;
@@ -159,17 +242,29 @@ export class DomainsService {
     };
   }> {
     const offset = (page - 1) * limit;
-    const [domains, total] = await Promise.all([
-      this.domainsRepository.findAllByUserIdPaginated(userId, limit, offset),
-      this.domainsRepository.countByUserId(userId),
+    const [domainsWithWhois, total] = await Promise.all([
+      this.domainsRepository.findDomainsWithWhoisByUserId(userId),
+      this.domainsRepository.countDomainsByUserId(userId),
     ]);
 
+    // Apply pagination to the in-memory result
+    const paginatedData = domainsWithWhois
+      .slice(offset, offset + limit)
+      .map(({ domain, whois }) => ({
+        domain_name: domain.domain_name,
+        last_checked_at: domain.last_checked_at,
+        whois: whois
+          ? {
+              registrar: whois.registrar,
+              expiry_date: whois.expiry_date,
+              creation_date: whois.creation_date,
+              updated_at: whois.updated_at,
+            }
+          : undefined,
+      }));
+
     return {
-      data: domains.map((d) => ({
-        domain: d.domain,
-        created_at: d.created_at,
-        updated_at: d.updated_at,
-      })),
+      data: paginatedData,
       pagination: {
         page,
         limit,
@@ -179,106 +274,31 @@ export class DomainsService {
     };
   }
 
-  async findOne(id: number, userId: number): Promise<Domain> {
-    const domain = await this.domainsRepository.findOne(id, userId);
-    if (!domain) {
-      throw new NotFoundException('Domain not found');
-    }
-    return domain;
-  }
+  async remove(domainName: string, userId: string): Promise<void> {
+    const cleanedDomain = this.cleanDomain(domainName);
+    const domainRecord =
+      await this.domainsRepository.findDomainByName(cleanedDomain);
 
-  async findOneByDomain(domain: string, userId: number): Promise<Domain> {
-    const cleanedDomain = this.cleanDomain(domain);
-    const domainRecord = await this.domainsRepository.findByDomainAndUserId(
-      cleanedDomain,
-      userId,
-    );
     if (!domainRecord) {
       throw new NotFoundException('Domain not found');
     }
-    return domainRecord;
-  }
 
-  async update(
-    id: number,
-    userId: number,
-    updateDomainDto: UpdateDomainDto,
-  ): Promise<Domain> {
-    const domain = await this.findOne(id, userId);
-
-    const updateData: Partial<Domain> = {};
-    if (updateDomainDto.domain) {
-      updateData.domain = this.cleanDomain(updateDomainDto.domain);
-
-      // Check if the new domain already exists for this user (excluding current domain)
-      const existingDomains =
-        await this.domainsRepository.findAllByUserId(userId);
-      if (
-        existingDomains.some(
-          (d) => d.domain === updateData.domain && d.id !== id,
-        )
-      ) {
-        throw new ConflictException('Domain already exists in your account');
-      }
-    }
-
-    const updated = await this.domainsRepository.update(id, userId, updateData);
-    if (!updated) {
-      throw new NotFoundException('Domain not found');
-    }
-    return updated;
-  }
-
-  async updateByDomain(
-    domain: string,
-    userId: number,
-    updateDomainDto: UpdateDomainDto,
-  ): Promise<Domain> {
-    const cleanedDomain = this.cleanDomain(domain);
-    const domainRecord = await this.findOneByDomain(cleanedDomain, userId);
-
-    const updateData: Partial<Domain> = {};
-    if (updateDomainDto.domain) {
-      updateData.domain = this.cleanDomain(updateDomainDto.domain);
-
-      // Check if the new domain already exists for this user (excluding current domain)
-      const existingDomains =
-        await this.domainsRepository.findAllByUserId(userId);
-      if (
-        existingDomains.some(
-          (d) => d.domain === updateData.domain && d.id !== domainRecord.id,
-        )
-      ) {
-        throw new ConflictException('Domain already exists in your account');
-      }
-    }
-
-    const updated = await this.domainsRepository.updateByDomain(
-      cleanedDomain,
+    const isWatching = await this.domainsRepository.isUserWatchingDomain(
       userId,
-      updateData,
+      domainRecord.id,
     );
-    if (!updated) {
-      throw new NotFoundException('Domain not found');
-    }
-    return updated;
-  }
 
-  async remove(id: number, userId: number): Promise<void> {
-    const deleted = await this.domainsRepository.delete(id, userId);
-    if (!deleted) {
-      throw new NotFoundException('Domain not found');
+    if (!isWatching) {
+      throw new NotFoundException('You are not watching this domain');
     }
-  }
 
-  async removeByDomain(domain: string, userId: number): Promise<void> {
-    const cleanedDomain = this.cleanDomain(domain);
-    const deleted = await this.domainsRepository.deleteByDomain(
-      cleanedDomain,
+    const deleted = await this.domainsRepository.removeDomainFromUser(
       userId,
+      domainRecord.id,
     );
+
     if (!deleted) {
-      throw new NotFoundException('Domain not found');
+      throw new NotFoundException('Failed to remove domain');
     }
   }
 
@@ -288,27 +308,38 @@ export class DomainsService {
     failed: number;
     errors: string[];
   }> {
-    const allDomains = await this.domainsRepository.findAll();
-
-    // Get unique domains (deduplicate - same domain might be in multiple user accounts)
-    const uniqueDomains = [...new Set(allDomains.map((d) => d.domain))];
+    const allDomains = await this.domainsRepository.findAllDomains();
 
     let success = 0;
     let failed = 0;
     const errors: string[] = [];
 
-    // Fetch WHOIS once per unique domain
-    for (const domain of uniqueDomains) {
+    // Fetch WHOIS for each unique domain
+    for (const domain of allDomains) {
       try {
-        const whoisData = await this.getWhois(domain);
-        // Upsert: update if exists, create if not
-        await this.domainsRepository.upsertWhoisRecord(domain, whoisData);
+        const whoisData = await this.getWhois(domain.domain_name);
+
+        // Upsert WHOIS record
+        await this.domainsRepository.upsertWhoisRecord(
+          domain.id,
+          whoisData.registrar,
+          whoisData.expiryDate,
+          whoisData.creationDate,
+          whoisData.rawText,
+        );
+
+        // Update last_checked_at
+        await this.domainsRepository.updateDomainLastChecked(
+          domain.id,
+          new Date(),
+        );
+
         success++;
       } catch (error) {
         failed++;
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
-        errors.push(`Domain ${domain}: ${errorMessage}`);
+        errors.push(`Domain ${domain.domain_name}: ${errorMessage}`);
       }
     }
 
