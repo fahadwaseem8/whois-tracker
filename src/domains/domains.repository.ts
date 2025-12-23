@@ -49,7 +49,8 @@ export class DomainsRepository {
         expiry_date TIMESTAMP,
         creation_date TIMESTAMP,
         raw_text TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_notification_sent_at TIMESTAMP
       );
       
       CREATE INDEX IF NOT EXISTS idx_whois_records_domain_id ON whois_records(domain_id);
@@ -203,6 +204,68 @@ export class DomainsRepository {
     return result.rows[0] as WhoisRecord;
   }
 
+  async updateNotificationSentAt(
+    domainId: number,
+    timestamp: Date,
+  ): Promise<void> {
+    await this.pool.query(
+      'UPDATE whois_records SET last_notification_sent_at = $2 WHERE domain_id = $1',
+      [domainId, timestamp],
+    );
+  }
+
+  // Get all domains with WHOIS data and user emails for notifications
+  async findAllDomainsWithUsersAndWhois(): Promise<
+    Array<{
+      domainId: number;
+      domainName: string;
+      userId: string;
+      userEmail: string;
+      whois: WhoisRecord | null;
+    }>
+  > {
+    const result = await this.pool.query(
+      `SELECT 
+        d.id as domain_id,
+        d.domain_name,
+        u.id as user_id,
+        u.email as user_email,
+        w.id as whois_id,
+        w.domain_id as whois_domain_id,
+        w.registrar,
+        w.expiry_date,
+        w.creation_date,
+        w.raw_text,
+        w.updated_at,
+        w.last_notification_sent_at
+       FROM domains d
+       INNER JOIN user_domains ud ON d.id = ud.domain_id
+       INNER JOIN users u ON ud.user_id = u.id
+       LEFT JOIN whois_records w ON d.id = w.domain_id
+       WHERE w.expiry_date IS NOT NULL
+       ORDER BY d.id`,
+    );
+
+    return result.rows.map((row) => ({
+      domainId: row.domain_id,
+      domainName: row.domain_name,
+      userId: row.user_id,
+      userEmail: row.user_email,
+      whois: row.whois_id
+        ? {
+            id: row.whois_id,
+            domain_id: row.whois_domain_id,
+            registrar: row.registrar,
+            expiry_date: row.expiry_date,
+            creation_date: row.creation_date,
+            raw_text: row.raw_text,
+            updated_at: row.updated_at,
+            last_notification_sent_at: row.last_notification_sent_at,
+          }
+        : null,
+    }));
+  }
+
   // Combined operation: Get domain with WHOIS data
   async findDomainWithWhois(domainId: number): Promise<{
     domain: Domain;
@@ -218,7 +281,8 @@ export class DomainsRepository {
           'expiry_date', w.expiry_date,
           'creation_date', w.creation_date,
           'raw_text', w.raw_text,
-          'updated_at', w.updated_at
+          'updated_at', w.updated_at,
+          'last_notification_sent_at', w.last_notification_sent_at
         ) as whois
        FROM domains d
        LEFT JOIN whois_records w ON d.id = w.domain_id
@@ -257,7 +321,8 @@ export class DomainsRepository {
         w.expiry_date,
         w.creation_date,
         w.raw_text,
-        w.updated_at as whois_updated_at
+        w.updated_at as whois_updated_at,
+        w.last_notification_sent_at
        FROM domains d
        INNER JOIN user_domains ud ON d.id = ud.domain_id
        LEFT JOIN whois_records w ON d.id = w.domain_id
@@ -281,6 +346,7 @@ export class DomainsRepository {
             creation_date: row.creation_date,
             raw_text: row.raw_text,
             updated_at: row.whois_updated_at,
+            last_notification_sent_at: row.last_notification_sent_at,
           }
         : null,
     }));

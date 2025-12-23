@@ -6,10 +6,14 @@ import {
 } from '@nestjs/common';
 import { DomainsRepository } from './domains.repository';
 import { Domain, CreateDomainDto, UpdateDomainDto } from './domain.interface';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class DomainsService {
-  constructor(private readonly domainsRepository: DomainsRepository) {}
+  constructor(
+    private readonly domainsRepository: DomainsRepository,
+    private readonly emailService: EmailService,
+  ) {}
 
   async initializeDatabase(): Promise<void> {
     await this.domainsRepository.createDomainsTable();
@@ -184,16 +188,18 @@ export class DomainsService {
       .toLowerCase();
   }
 
-  async create(userId: string, createDomainDto: CreateDomainDto): Promise<{
+  async create(
+    userId: string,
+    createDomainDto: CreateDomainDto,
+  ): Promise<{
     domain: Domain;
     message: string;
   }> {
     const cleanedDomain = this.cleanDomain(createDomainDto.domain_name);
 
     // Find or create domain
-    let domainRecord = await this.domainsRepository.findDomainByName(
-      cleanedDomain,
-    );
+    let domainRecord =
+      await this.domainsRepository.findDomainByName(cleanedDomain);
 
     if (!domainRecord) {
       domainRecord = await this.domainsRepository.createDomain({
@@ -307,19 +313,67 @@ export class DomainsService {
     success: number;
     failed: number;
     errors: string[];
+    emailsSent: number;
+    emailsFailed: number;
   }> {
     const allDomains = await this.domainsRepository.findAllDomains();
 
     let success = 0;
     let failed = 0;
     const errors: string[] = [];
+    let emailsSent = 0;
+    let emailsFailed = 0;
 
     // Fetch WHOIS for each unique domain
     for (const domain of allDomains) {
       try {
-        const whoisData = await this.getWhois(domain.domain_name);
+        // Get existing WHOIS record before updating
+        const existingWhois =
+          await this.domainsRepository.findWhoisRecordByDomainId(domain.id);
+        const oldExpiryDate = existingWhois?.expiry_date
+          ? new Date(existingWhois.expiry_date)
+          : null;
 
-        // Upsert WHOIS record
+        // Fetch new WHOIS data
+        const whoisData = await this.getWhois(domain.domain_name);
+        const newExpiryDate = whoisData.expiryDate;
+
+        // Check if expiry date changed and send notification
+        if (
+          oldExpiryDate &&
+          newExpiryDate &&
+          oldExpiryDate.getTime() !== newExpiryDate.getTime()
+        ) {
+          // Get all users watching this domain
+          const domainsWithUsers =
+            await this.domainsRepository.findAllDomainsWithUsersAndWhois();
+          const usersForDomain = domainsWithUsers.filter(
+            (d) => d.domainId === domain.id,
+          );
+
+          for (const { userEmail, domainName } of usersForDomain) {
+            try {
+              await this.emailService.sendExpiryDateChangedEmail({
+                email: userEmail,
+                domainName,
+                oldExpiryDate,
+                newExpiryDate,
+              });
+              emailsSent++;
+              console.log(
+                `Expiry date change notification sent for ${domainName} to ${userEmail}`,
+              );
+            } catch (error) {
+              emailsFailed++;
+              console.error(
+                `Failed to send expiry change notification for ${domainName}:`,
+                error,
+              );
+            }
+          }
+        }
+
+        // Update WHOIS record with new data
         await this.domainsRepository.upsertWhoisRecord(
           domain.id,
           whoisData.registrar,
@@ -343,6 +397,76 @@ export class DomainsService {
       }
     }
 
-    return { success, failed, errors };
+    // After updating all domains, check for expiry notifications
+    const emailResult = await this.sendExpiryNotifications();
+
+    return {
+      success,
+      failed,
+      errors,
+      emailsSent: emailsSent + emailResult.emailsSent,
+      emailsFailed: emailsFailed + emailResult.emailsFailed,
+    };
+  }
+
+  // Send expiry notifications for domains
+  private async sendExpiryNotifications(): Promise<{
+    emailsSent: number;
+    emailsFailed: number;
+  }> {
+    const domainsWithUsers =
+      await this.domainsRepository.findAllDomainsWithUsersAndWhois();
+
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    const now = new Date();
+
+    // Alert thresholds in days
+    const alertThresholds = [30, 7, 1];
+
+    for (const { domainId, domainName, userEmail, whois } of domainsWithUsers) {
+      if (!whois || !whois.expiry_date) continue;
+
+      const expiryDate = new Date(whois.expiry_date);
+      const daysUntilExpiry = Math.ceil(
+        (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      // Check if domain is approaching expiry
+      if (daysUntilExpiry > 0 && alertThresholds.includes(daysUntilExpiry)) {
+        // Check if we already sent notification recently (within last 12 hours)
+        const shouldSendNotification =
+          !whois.last_notification_sent_at ||
+          now.getTime() - new Date(whois.last_notification_sent_at).getTime() >
+            12 * 60 * 60 * 1000;
+
+        if (shouldSendNotification) {
+          try {
+            await this.emailService.sendDomainExpiringEmail({
+              email: userEmail,
+              domainName,
+              expiryDate,
+              daysUntilExpiry,
+            });
+            await this.domainsRepository.updateNotificationSentAt(
+              domainId,
+              now,
+            );
+            emailsSent++;
+            console.log(
+              `Expiry alert sent for ${domainName} to ${userEmail} (${daysUntilExpiry} days remaining)`,
+            );
+          } catch (error) {
+            emailsFailed++;
+            console.error(
+              `Failed to send expiry alert for ${domainName}:`,
+              error,
+            );
+          }
+        }
+      }
+    }
+
+    return { emailsSent, emailsFailed };
   }
 }

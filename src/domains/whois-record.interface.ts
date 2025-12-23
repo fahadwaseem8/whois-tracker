@@ -6,4 +6,5 @@ export interface WhoisRecord {
   creation_date: Date | null;
   raw_text: string;
   updated_at: Date;
+  last_notification_sent_at: Date | null;
 }

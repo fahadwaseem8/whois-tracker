@@ -109,6 +109,8 @@ export class DomainsController {
     success: number;
     failed: number;
     errors: string[];
+    emailsSent: number;
+    emailsFailed: number;
   }> {
     // Vercel cron automatically sends x-vercel-cron header
     // Also allow manual calls with CRON_SECRET
@@ -122,7 +124,7 @@ export class DomainsController {
 
     const result = await this.domainsService.fetchWhoisForAllDomains();
     return {
-      message: `WHOIS fetch completed. Success: ${result.success}, Failed: ${result.failed}`,
+      message: `WHOIS fetch completed. Success: ${result.success}, Failed: ${result.failed}, Emails sent: ${result.emailsSent}, Emails failed: ${result.emailsFailed}`,
       ...result,
     };
   }
