@@ -1,11 +1,16 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { UsersService } from './users/users.service';
 import { DomainsService } from './domains/domains.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Serve static assets (favicon, etc.)
+  app.useStaticAssets(join(__dirname, '..', 'public'));
 
   // Enable validation pipes
   app.useGlobalPipes(
