@@ -269,10 +269,10 @@ export class DomainsRepository {
        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) 
        ON CONFLICT (domain_id) 
        DO UPDATE SET 
-         registrar = $2,
-         expiry_date = $3,
-         creation_date = $4,
-         raw_text = $5,
+         registrar = EXCLUDED.registrar,
+         expiry_date = EXCLUDED.expiry_date,
+         creation_date = EXCLUDED.creation_date,
+         raw_text = EXCLUDED.raw_text,
          updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [domainId, registrar, expiryDate, creationDate, rawText],
