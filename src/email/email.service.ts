@@ -16,6 +16,12 @@ export interface ExpiryDateChangedEmailData {
   newExpiryDate: Date;
 }
 
+export interface DomainDroppedEmailData {
+  email: string;
+  domainName: string;
+  lastKnownExpiryDate: Date;
+}
+
 @Injectable()
 export class EmailService {
   private resend: Resend;
@@ -245,6 +251,119 @@ export class EmailService {
     } catch (error) {
       console.error(
         `Failed to send expiry change email for ${domainName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async sendDomainDroppedEmail(data: DomainDroppedEmailData): Promise<void> {
+    const { email, domainName, lastKnownExpiryDate } = data;
+
+    const subject = `ALERT: Domain Dropped - ${domainName}`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { 
+              font-family: Arial, sans-serif;
+              line-height: 1.6; 
+              color: #333333;
+              margin: 0;
+              padding: 20px;
+              background-color: #ffffff;
+            }
+            .container { 
+              max-width: 600px;
+            }
+            h2 {
+              color: #d32f2f;
+              font-size: 20px;
+              margin: 0 0 20px 0;
+            }
+            p {
+              margin: 0 0 15px 0;
+            }
+            .alert-section {
+              margin: 20px 0;
+              padding: 15px;
+              background-color: #fff3cd;
+              border-left: 4px solid #d32f2f;
+            }
+            .alert-section p {
+              margin: 8px 0;
+            }
+            .footer {
+              margin-top: 30px;
+              padding-top: 20px;
+              border-top: 1px solid #cccccc;
+              font-size: 12px;
+              color: #666666;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h2>⚠️ Domain Dropped Alert</h2>
+            
+            <p>Hello,</p>
+            
+            <p><strong>IMPORTANT:</strong> Our monitoring system has detected that the following domain appears to have been dropped or no longer has valid WHOIS data.</p>
+            
+            <div class="alert-section">
+              <p><strong>Domain:</strong> ${domainName}</p>
+              <p><strong>Last Known Expiry Date:</strong> ${lastKnownExpiryDate.toLocaleDateString(
+                'en-US',
+                {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                },
+              )}</p>
+              <p><strong>Status:</strong> Expiry date is now unavailable</p>
+            </div>
+            
+            <p><strong>What this means:</strong></p>
+            <p>The domain's expiry date has disappeared from WHOIS records. This typically indicates one of the following:</p>
+            <ul>
+              <li>The domain registration has expired and was not renewed</li>
+              <li>The domain has been dropped by the registrar</li>
+              <li>The domain is in a redemption/pending delete period</li>
+              <li>WHOIS privacy settings have changed</li>
+            </ul>
+            
+            <p><strong>Recommended Actions:</strong></p>
+            <ul>
+              <li>Verify the domain status with your registrar immediately</li>
+              <li>Check if the domain registration needs to be renewed</li>
+              <li>If you still own the domain, ensure the registration is active</li>
+            </ul>
+            
+            <div class="footer">
+              <p>WHOIS Tracker - Automated Domain Monitoring</p>
+              <p>You are receiving this because ${domainName} is in your monitored domains list.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    try {
+      await this.resend.emails.send({
+        from: this.fromEmail,
+        to: email,
+        subject,
+        html,
+      });
+      console.log(
+        `Domain dropped alert email sent to ${email} for domain ${domainName}`,
+      );
+    } catch (error) {
+      console.error(
+        `Failed to send domain dropped email for ${domainName}:`,
         error,
       );
       throw error;

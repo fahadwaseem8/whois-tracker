@@ -338,19 +338,41 @@ export class DomainsService {
         const whoisData = await this.getWhois(domain.domain_name);
         const newExpiryDate = whoisData.expiryDate;
 
-        // Check if expiry date changed and send notification
-        if (
+        // Get all users watching this domain (for notifications)
+        const domainsWithUsers =
+          await this.domainsRepository.findAllDomainsWithUsersAndWhois();
+        const usersForDomain = domainsWithUsers.filter(
+          (d) => d.domainId === domain.id,
+        );
+
+        // Case 1: Domain was dropped (had expiry date, now it's null/empty)
+        if (oldExpiryDate && !newExpiryDate) {
+          for (const { userEmail, domainName } of usersForDomain) {
+            try {
+              await this.emailService.sendDomainDroppedEmail({
+                email: userEmail,
+                domainName,
+                lastKnownExpiryDate: oldExpiryDate,
+              });
+              emailsSent++;
+              console.log(
+                `Domain dropped notification sent for ${domainName} to ${userEmail}`,
+              );
+            } catch (error) {
+              emailsFailed++;
+              console.error(
+                `Failed to send domain dropped notification for ${domainName}:`,
+                error,
+              );
+            }
+          }
+        }
+        // Case 2: Expiry date changed (both exist but different)
+        else if (
           oldExpiryDate &&
           newExpiryDate &&
           oldExpiryDate.getTime() !== newExpiryDate.getTime()
         ) {
-          // Get all users watching this domain
-          const domainsWithUsers =
-            await this.domainsRepository.findAllDomainsWithUsersAndWhois();
-          const usersForDomain = domainsWithUsers.filter(
-            (d) => d.domainId === domain.id,
-          );
-
           for (const { userEmail, domainName } of usersForDomain) {
             try {
               await this.emailService.sendExpiryDateChangedEmail({
