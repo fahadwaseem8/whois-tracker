@@ -19,6 +19,33 @@ export class UsersRepository {
       );
       
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      
+      -- Enable RLS
+      ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+      
+      -- Policy: Users can only see their own user record
+      DROP POLICY IF EXISTS users_select_policy ON users;
+      CREATE POLICY users_select_policy ON users
+        FOR SELECT
+        USING (id = current_setting('app.user_id', true)::uuid);
+      
+      -- Policy: Anyone can insert (for registration)
+      DROP POLICY IF EXISTS users_insert_policy ON users;
+      CREATE POLICY users_insert_policy ON users
+        FOR INSERT
+        WITH CHECK (true);
+      
+      -- Policy: Users can only update their own record
+      DROP POLICY IF EXISTS users_update_policy ON users;
+      CREATE POLICY users_update_policy ON users
+        FOR UPDATE
+        USING (id = current_setting('app.user_id', true)::uuid);
+      
+      -- Policy: Users can only delete their own record
+      DROP POLICY IF EXISTS users_delete_policy ON users;
+      CREATE POLICY users_delete_policy ON users
+        FOR DELETE
+        USING (id = current_setting('app.user_id', true)::uuid);
     `;
     await this.pool.query(query);
   }

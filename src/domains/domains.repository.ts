@@ -20,6 +20,31 @@ export class DomainsRepository {
       
       CREATE INDEX IF NOT EXISTS idx_domains_domain_name ON domains(domain_name);
       CREATE INDEX IF NOT EXISTS idx_domains_last_checked_at ON domains(last_checked_at);
+      
+      -- Enable RLS
+      ALTER TABLE domains ENABLE ROW LEVEL SECURITY;
+      
+      -- Policy: Users can only see domains they are watching
+      DROP POLICY IF EXISTS domains_select_policy ON domains;
+      CREATE POLICY domains_select_policy ON domains
+        FOR SELECT
+        USING (
+          id IN (
+            SELECT domain_id FROM user_domains WHERE user_id = current_setting('app.user_id', true)::uuid
+          )
+        );
+      
+      -- Policy: System can insert any domain (for background jobs)
+      DROP POLICY IF EXISTS domains_insert_policy ON domains;
+      CREATE POLICY domains_insert_policy ON domains
+        FOR INSERT
+        WITH CHECK (true);
+      
+      -- Policy: System can update any domain (for background jobs)
+      DROP POLICY IF EXISTS domains_update_policy ON domains;
+      CREATE POLICY domains_update_policy ON domains
+        FOR UPDATE
+        USING (true);
     `;
     await this.pool.query(query);
   }
@@ -35,6 +60,27 @@ export class DomainsRepository {
       
       CREATE INDEX IF NOT EXISTS idx_user_domains_user_id ON user_domains(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_domains_domain_id ON user_domains(domain_id);
+      
+      -- Enable RLS
+      ALTER TABLE user_domains ENABLE ROW LEVEL SECURITY;
+      
+      -- Policy: Users can only see their own domain relationships
+      DROP POLICY IF EXISTS user_domains_select_policy ON user_domains;
+      CREATE POLICY user_domains_select_policy ON user_domains
+        FOR SELECT
+        USING (user_id = current_setting('app.user_id', true)::uuid);
+      
+      -- Policy: Users can only insert their own domain relationships
+      DROP POLICY IF EXISTS user_domains_insert_policy ON user_domains;
+      CREATE POLICY user_domains_insert_policy ON user_domains
+        FOR INSERT
+        WITH CHECK (user_id = current_setting('app.user_id', true)::uuid);
+      
+      -- Policy: Users can only delete their own domain relationships
+      DROP POLICY IF EXISTS user_domains_delete_policy ON user_domains;
+      CREATE POLICY user_domains_delete_policy ON user_domains
+        FOR DELETE
+        USING (user_id = current_setting('app.user_id', true)::uuid);
     `;
     await this.pool.query(query);
   }
@@ -55,6 +101,30 @@ export class DomainsRepository {
       
       CREATE INDEX IF NOT EXISTS idx_whois_records_domain_id ON whois_records(domain_id);
       CREATE INDEX IF NOT EXISTS idx_whois_records_expiry_date ON whois_records(expiry_date);
+      
+      -- Enable RLS
+      ALTER TABLE whois_records ENABLE ROW LEVEL SECURITY;
+      
+      -- Policy: Users can only see WHOIS records for domains they are watching
+      DROP POLICY IF EXISTS whois_records_select_policy ON whois_records;
+      CREATE POLICY whois_records_select_policy ON whois_records
+        FOR SELECT
+        USING (
+          domain_id IN (
+            SELECT domain_id FROM user_domains WHERE user_id = current_setting('app.user_id', true)::uuid
+          )
+        );
+      
+      -- Policy: System can insert/update any WHOIS record (for background jobs)
+      DROP POLICY IF EXISTS whois_records_insert_policy ON whois_records;
+      CREATE POLICY whois_records_insert_policy ON whois_records
+        FOR INSERT
+        WITH CHECK (true);
+      
+      DROP POLICY IF EXISTS whois_records_update_policy ON whois_records;
+      CREATE POLICY whois_records_update_policy ON whois_records
+        FOR UPDATE
+        USING (true);
     `;
     await this.pool.query(query);
   }
