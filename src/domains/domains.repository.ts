@@ -20,31 +20,6 @@ export class DomainsRepository {
       
       CREATE INDEX IF NOT EXISTS idx_domains_domain_name ON domains(domain_name);
       CREATE INDEX IF NOT EXISTS idx_domains_last_checked_at ON domains(last_checked_at);
-      
-      -- Enable RLS
-      ALTER TABLE domains ENABLE ROW LEVEL SECURITY;
-      
-      -- Policy: Users can only see domains they are watching
-      DROP POLICY IF EXISTS domains_select_policy ON domains;
-      CREATE POLICY domains_select_policy ON domains
-        FOR SELECT
-        USING (
-          id IN (
-            SELECT domain_id FROM user_domains WHERE user_id = current_setting('app.user_id', true)::uuid
-          )
-        );
-      
-      -- Policy: System can insert any domain (for background jobs)
-      DROP POLICY IF EXISTS domains_insert_policy ON domains;
-      CREATE POLICY domains_insert_policy ON domains
-        FOR INSERT
-        WITH CHECK (true);
-      
-      -- Policy: System can update any domain (for background jobs)
-      DROP POLICY IF EXISTS domains_update_policy ON domains;
-      CREATE POLICY domains_update_policy ON domains
-        FOR UPDATE
-        USING (true);
     `;
     await this.pool.query(query);
   }
@@ -123,6 +98,37 @@ export class DomainsRepository {
       
       DROP POLICY IF EXISTS whois_records_update_policy ON whois_records;
       CREATE POLICY whois_records_update_policy ON whois_records
+        FOR UPDATE
+        USING (true);
+    `;
+    await this.pool.query(query);
+  }
+
+  // Enable RLS policies after all tables are created
+  async enableRlsPolicies(): Promise<void> {
+    const query = `
+      -- Enable RLS on domains table
+      ALTER TABLE domains ENABLE ROW LEVEL SECURITY;
+      
+      -- Policy: Users can only see domains they are watching
+      DROP POLICY IF EXISTS domains_select_policy ON domains;
+      CREATE POLICY domains_select_policy ON domains
+        FOR SELECT
+        USING (
+          id IN (
+            SELECT domain_id FROM user_domains WHERE user_id = current_setting('app.user_id', true)::uuid
+          )
+        );
+      
+      -- Policy: System can insert any domain (for background jobs)
+      DROP POLICY IF EXISTS domains_insert_policy ON domains;
+      CREATE POLICY domains_insert_policy ON domains
+        FOR INSERT
+        WITH CHECK (true);
+      
+      -- Policy: System can update any domain (for background jobs)
+      DROP POLICY IF EXISTS domains_update_policy ON domains;
+      CREATE POLICY domains_update_policy ON domains
         FOR UPDATE
         USING (true);
     `;
@@ -316,21 +322,21 @@ export class DomainsRepository {
        ORDER BY d.id`,
     );
 
-    return result.rows.map((row) => ({
-      domainId: row.domain_id,
-      domainName: row.domain_name,
-      userId: row.user_id,
-      userEmail: row.user_email,
+    return result.rows.map((row: any) => ({
+      domainId: row.domain_id as number,
+      domainName: row.domain_name as string,
+      userId: row.user_id as string,
+      userEmail: row.user_email as string,
       whois: row.whois_id
         ? {
-            id: row.whois_id,
-            domain_id: row.whois_domain_id,
-            registrar: row.registrar,
-            expiry_date: row.expiry_date,
-            creation_date: row.creation_date,
-            raw_text: row.raw_text,
-            updated_at: row.updated_at,
-            last_notification_sent_at: row.last_notification_sent_at,
+            id: row.whois_id as number,
+            domain_id: row.whois_domain_id as number,
+            registrar: row.registrar as string,
+            expiry_date: row.expiry_date as Date,
+            creation_date: row.creation_date as Date,
+            raw_text: row.raw_text as string,
+            updated_at: row.updated_at as Date,
+            last_notification_sent_at: row.last_notification_sent_at as Date | null,
           }
         : null,
     }));
@@ -362,12 +368,12 @@ export class DomainsRepository {
 
     if (result.rows.length === 0) return null;
 
-    const row = result.rows[0];
+    const row = result.rows[0] as any;
     return {
       domain: {
-        id: row.id,
-        domain_name: row.domain_name,
-        last_checked_at: row.last_checked_at,
+        id: row.id as number,
+        domain_name: row.domain_name as string,
+        last_checked_at: row.last_checked_at as Date | null,
       },
       whois: row.whois?.id ? row.whois : null,
     };
@@ -401,22 +407,22 @@ export class DomainsRepository {
       [userId],
     );
 
-    return result.rows.map((row) => ({
+    return result.rows.map((row: any) => ({
       domain: {
-        id: row.domain_id,
-        domain_name: row.domain_name,
-        last_checked_at: row.last_checked_at,
+        id: row.domain_id as number,
+        domain_name: row.domain_name as string,
+        last_checked_at: row.last_checked_at as Date | null,
       },
       whois: row.whois_id
         ? {
-            id: row.whois_id,
-            domain_id: row.whois_domain_id,
-            registrar: row.registrar,
-            expiry_date: row.expiry_date,
-            creation_date: row.creation_date,
-            raw_text: row.raw_text,
-            updated_at: row.whois_updated_at,
-            last_notification_sent_at: row.last_notification_sent_at,
+            id: row.whois_id as number,
+            domain_id: row.whois_domain_id as number,
+            registrar: row.registrar as string,
+            expiry_date: row.expiry_date as Date,
+            creation_date: row.creation_date as Date,
+            raw_text: row.raw_text as string,
+            updated_at: row.whois_updated_at as Date,
+            last_notification_sent_at: row.last_notification_sent_at as Date | null,
           }
         : null,
     }));

@@ -17,7 +17,7 @@ export class RlsInterceptor implements NestInterceptor {
     context: ExecutionContext,
     next: CallHandler,
   ): Promise<Observable<any>> {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<{ user?: { id: string } }>();
     const user = request.user;
 
     // If user is authenticated, set the RLS context variable

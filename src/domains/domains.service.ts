@@ -19,6 +19,7 @@ export class DomainsService {
     await this.domainsRepository.createDomainsTable();
     await this.domainsRepository.createUserDomainsTable();
     await this.domainsRepository.createWhoisRecordsTable();
+    await this.domainsRepository.enableRlsPolicies();
   }
 
   // WHOIS methods
