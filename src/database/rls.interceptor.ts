@@ -24,10 +24,9 @@ export class RlsInterceptor implements NestInterceptor {
     if (user && user.id) {
       try {
         // Set the user_id in the PostgreSQL session for RLS
-        await this.pool.query(
-          `SELECT set_config('app.user_id', $1, false)`,
-          [user.id],
-        );
+        await this.pool.query(`SELECT set_config('app.user_id', $1, false)`, [
+          user.id,
+        ]);
       } catch (error) {
         console.error('Failed to set RLS context:', error);
       }
